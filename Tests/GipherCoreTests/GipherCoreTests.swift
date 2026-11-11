@@ -114,6 +114,47 @@ final class GipherCoreTests: XCTestCase {
         XCTAssertEqual(c.queryItems?.first { $0.name == "q" }?.value, "happy b")
     }
 
+    func testHotkeyLabels() {
+        XCTAssertEqual(Hotkey.default.label, "⌥⌘G")
+        let all = Hotkey.control | Hotkey.option | Hotkey.shift | Hotkey.command
+        XCTAssertEqual(Hotkey(keyCode: 49, modifiers: all, keyLabel: "Space").label, "⌃⌥⇧⌘Space")
+    }
+
+    func testHotkeyKeyNames() {
+        XCTAssertEqual(Hotkey.keyName(keyCode: 5, characters: "g"), "G")
+        XCTAssertEqual(Hotkey.keyName(keyCode: 49, characters: " "), "Space")
+        XCTAssertEqual(Hotkey.keyName(keyCode: 96, characters: "\u{F708}"), "F5")
+        XCTAssertEqual(Hotkey.keyName(keyCode: 126, characters: nil), "↑")
+    }
+
+    func testHotkeyNeedsARealModifier() {
+        XCTAssertTrue(Hotkey.default.isUsable)
+        XCTAssertFalse(Hotkey(keyCode: 5, modifiers: 0, keyLabel: "G").isUsable)
+        XCTAssertFalse(Hotkey(keyCode: 5, modifiers: Hotkey.shift, keyLabel: "G").isUsable)
+        XCTAssertTrue(Hotkey(keyCode: 96, modifiers: 0, keyLabel: "F5").isUsable, "function keys may stand alone")
+        XCTAssertFalse(Hotkey(keyCode: 5, modifiers: Hotkey.command, keyLabel: "").isUsable)
+    }
+
+    func testMatchesMenuShortcuts() {
+        let optCmdG = Hotkey.default
+        // Option = 2, Command implied.
+        XCTAssertTrue(optCmdG.matchesMenuShortcut(character: "g", virtualKey: nil, menuModifiers: 2))
+        XCTAssertFalse(optCmdG.matchesMenuShortcut(character: "G", virtualKey: nil, menuModifiers: 0), "plain ⌘G is a different shortcut")
+        XCTAssertFalse(optCmdG.matchesMenuShortcut(character: "G", virtualKey: nil, menuModifiers: 2 | 8), "⌥G without Command")
+        XCTAssertFalse(optCmdG.matchesMenuShortcut(character: "H", virtualKey: nil, menuModifiers: 2))
+        XCTAssertFalse(optCmdG.matchesMenuShortcut(character: nil, virtualKey: nil, menuModifiers: 2))
+
+        let ctrlCmdSpace = Hotkey(keyCode: 49, modifiers: Hotkey.control | Hotkey.command, keyLabel: "Space")
+        XCTAssertTrue(ctrlCmdSpace.matchesMenuShortcut(character: " ", virtualKey: nil, menuModifiers: 4))
+        XCTAssertTrue(ctrlCmdSpace.matchesMenuShortcut(character: nil, virtualKey: 49, menuModifiers: 4))
+    }
+
+    func testLegacyHotkeyPresetsMigrate() {
+        XCTAssertEqual(Hotkey.legacy("optCmdG"), .default)
+        XCTAssertEqual(Hotkey.legacy("ctrlOptSpace")?.label, "⌃⌥Space")
+        XCTAssertNil(Hotkey.legacy("nonsense"))
+    }
+
     func testGifRoundTripsThroughCodable() throws {
         let gif = try GiphyClient.decodePage(fixture).gifs[0]
         let again = try JSONDecoder().decode(Gif.self, from: JSONEncoder().encode(gif))
