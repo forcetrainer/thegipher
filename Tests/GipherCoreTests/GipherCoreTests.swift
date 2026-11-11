@@ -135,6 +135,20 @@ final class GipherCoreTests: XCTestCase {
         XCTAssertFalse(Hotkey(keyCode: 5, modifiers: Hotkey.command, keyLabel: "").isUsable)
     }
 
+    func testMatchesMenuShortcuts() {
+        let optCmdG = Hotkey.default
+        // Option = 2, Command implied.
+        XCTAssertTrue(optCmdG.matchesMenuShortcut(character: "g", virtualKey: nil, menuModifiers: 2))
+        XCTAssertFalse(optCmdG.matchesMenuShortcut(character: "G", virtualKey: nil, menuModifiers: 0), "plain ⌘G is a different shortcut")
+        XCTAssertFalse(optCmdG.matchesMenuShortcut(character: "G", virtualKey: nil, menuModifiers: 2 | 8), "⌥G without Command")
+        XCTAssertFalse(optCmdG.matchesMenuShortcut(character: "H", virtualKey: nil, menuModifiers: 2))
+        XCTAssertFalse(optCmdG.matchesMenuShortcut(character: nil, virtualKey: nil, menuModifiers: 2))
+
+        let ctrlCmdSpace = Hotkey(keyCode: 49, modifiers: Hotkey.control | Hotkey.command, keyLabel: "Space")
+        XCTAssertTrue(ctrlCmdSpace.matchesMenuShortcut(character: " ", virtualKey: nil, menuModifiers: 4))
+        XCTAssertTrue(ctrlCmdSpace.matchesMenuShortcut(character: nil, virtualKey: 49, menuModifiers: 4))
+    }
+
     func testLegacyHotkeyPresetsMigrate() {
         XCTAssertEqual(Hotkey.legacy("optCmdG"), .default)
         XCTAssertEqual(Hotkey.legacy("ctrlOptSpace")?.label, "⌃⌥Space")

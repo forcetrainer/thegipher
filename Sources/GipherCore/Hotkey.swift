@@ -57,6 +57,22 @@ public struct Hotkey: Codable, Equatable, Sendable {
         return typed.uppercased()
     }
 
+    /// Whether a menu command's shortcut, as the Accessibility API describes it, is this
+    /// same key combination. Menu modifiers there are a bit mask: 1 Shift, 2 Option,
+    /// 4 Control, and 8 meaning "no Command" (Command is otherwise implied).
+    public func matchesMenuShortcut(character: String?, virtualKey: Int?, menuModifiers: Int) -> Bool {
+        var carbon: UInt32 = 0
+        if menuModifiers & 8 == 0 { carbon |= Self.command }
+        if menuModifiers & 1 != 0 { carbon |= Self.shift }
+        if menuModifiers & 2 != 0 { carbon |= Self.option }
+        if menuModifiers & 4 != 0 { carbon |= Self.control }
+        guard carbon == modifiers else { return false }
+        if let virtualKey, virtualKey == Int(keyCode) { return true }
+        guard let character, !character.isEmpty else { return false }
+        if character == " " { return keyCode == 49 }
+        return character.uppercased() == keyLabel
+    }
+
     /// Shortcuts saved by early builds, which offered a fixed list.
     public static func legacy(_ preset: String) -> Hotkey? {
         switch preset {

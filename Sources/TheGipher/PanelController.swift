@@ -166,6 +166,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     /// Returns true when the key was consumed.
     private func handle(_ event: NSEvent) -> Bool {
+        model.noteKeyPress()
         let command = event.modifierFlags.contains(.command)
         switch Int(event.keyCode) {
         case kVK_Escape:
@@ -176,7 +177,8 @@ final class PanelController: NSObject, NSWindowDelegate {
             send(gif, mode: command ? .pasteAndSend : .paste)
             return true
         case kVK_Space:
-            // Space previews the highlighted GIF; with nothing highlighted it's just a space.
+            // Space previews the GIF under the pointer or highlighted with the arrow
+            // keys; with neither, it's just a space in the search field.
             guard model.selected != nil else { return false }
             model.previewing.toggle()
             return true

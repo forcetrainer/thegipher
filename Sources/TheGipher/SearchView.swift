@@ -207,7 +207,8 @@ struct SearchView: View {
                             selected: model.selection == index,
                             sending: model.sendingID == gif.id,
                             favorite: favorite,
-                            toggleFavorite: { model.toggleFavorite(gif) }
+                            toggleFavorite: { model.toggleFavorite(gif) },
+                            pointed: { model.hover(index: index) }
                         )
                         .id(gif.id)
                         .onTapGesture { model.onSend?(gif, .paste) }
@@ -237,7 +238,9 @@ struct SearchView: View {
                 .padding(.bottom, 12)
             }
             .onChange(of: model.selection) { _, selection in
-                guard let selection, model.items.indices.contains(selection) else { return }
+                guard let selection, model.items.indices.contains(selection),
+                    !model.selectionFromPointer
+                else { return }
                 withAnimation(.easeOut(duration: 0.12)) {
                     proxy.scrollTo(model.items[selection].id)
                 }
@@ -310,6 +313,8 @@ private struct GifCell: View {
     let sending: Bool
     let favorite: Bool
     let toggleFavorite: () -> Void
+    /// Called as the pointer moves over the cell.
+    let pointed: () -> Void
     @State private var image: NSImage?
     @State private var hovering = false
 
@@ -343,14 +348,22 @@ private struct GifCell: View {
                     lineWidth: selected ? 3 : 2)
         )
         .overlay(alignment: .topTrailing) {
-            if favorite || hovering { star }
+            if favorite || hovering || selected { star }
         }
         .shadow(color: .black.opacity(lifted ? 0.35 : 0), radius: 8, y: 4)
         .scaleEffect(lifted ? 1.04 : 1)
         .zIndex(lifted ? 1 : 0)
         .animation(.snappy(duration: 0.16), value: lifted)
         .contentShape(Rectangle())
-        .onHover { hovering = $0 }
+        .onContinuousHover { phase in
+            switch phase {
+            case .active:
+                hovering = true
+                pointed()
+            case .ended:
+                hovering = false
+            }
+        }
         .help(gif.title)
         .accessibilityLabel(gif.title.isEmpty ? "GIF" : gif.title)
         .task(id: gif.id) {
