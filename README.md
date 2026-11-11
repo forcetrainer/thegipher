@@ -156,6 +156,11 @@ The build script signs with your Apple Development certificate when you have one
 the Accessibility permission survives rebuilds. Without one it signs ad hoc, and macOS
 asks for the permission again after each rebuild.
 
+## License
+
+[MIT](LICENSE): use it, copy it, change it, ship it. The GIFs themselves come from
+GIPHY and belong to their owners; using the GIPHY API is subject to GIPHY's terms.
+
 ---
 
 GIF search is powered by [GIPHY](https://giphy.com). TheGipher is not affiliated with
