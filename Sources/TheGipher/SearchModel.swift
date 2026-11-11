@@ -1,18 +1,31 @@
+import AppKit
 import Foundation
 import GipherCore
+
+enum SendMode {
+    /// Paste into the app that was being typed in.
+    case paste
+    /// Paste, then press Return to send the message.
+    case pasteAndSend
+    /// Just put it on the clipboard.
+    case copyOnly
+}
 
 @MainActor
 final class SearchModel: ObservableObject {
     enum Tab: String, CaseIterable, Identifiable {
-        case gifs, stickers, recent
+        case gifs, stickers, favorites, recent
         var id: String { rawValue }
         var label: String {
             switch self {
             case .gifs: return "GIFs"
             case .stickers: return "Stickers"
+            case .favorites: return "Favorites"
             case .recent: return "Recent"
             }
         }
+        /// Favorites and Recent are saved on this Mac; they need no API key or network.
+        var isLocal: Bool { self == .favorites || self == .recent }
     }
 
     static let columns = 4
@@ -31,18 +44,31 @@ final class SearchModel: ObservableObject {
     /// Suggested searches: what's trending when the field is empty, completions of
     /// what's been typed otherwise.
     @Published private(set) var suggestions: [String] = []
-    @Published var selection: Int?
+    @Published var selection: Int? {
+        didSet { if selection == nil { previewing = false } }
+    }
+    /// Whether the highlighted GIF is shown large.
+    @Published var previewing = false
+    @Published private(set) var favoriteIDs: Set<String>
     @Published private(set) var isLoading = false
     @Published var message: String?
     @Published var sendingID: String?
     /// Bumped each time the panel opens, so the view can refocus the search field.
     @Published private(set) var focusToken = 0
 
-    var onSend: ((Gif) -> Void)?
-    var onCopyOnly: ((Gif) -> Void)?
+    var onSend: ((Gif, SendMode) -> Void)?
+
+    /// True when the pointer, not the keyboard, made the current selection. The grid
+    /// scrolls to follow keyboard selection only.
+    private(set) var selectionFromPointer = false
+    /// Where the pointer was at the last key press. Results load and scroll underneath
+    /// a resting pointer, and that must not count as pointing at a GIF: it would
+    /// hijack the space bar mid-search and fight the arrow keys.
+    private var pointerAtLastKey: CGPoint?
 
     private let settings: AppSettings
-    private let recents: RecentsStore
+    private let recents: GifListStore
+    private let favorites: GifListStore
     private var task: Task<Void, Never>?
     private var suggestionTask: Task<Void, Never>?
     private var generation = 0
@@ -55,16 +81,24 @@ final class SearchModel: ObservableObject {
     private var trendingTerms: (terms: [String], fetched: Date)?
     private var completions: [String: [String]] = [:]
 
-    init(settings: AppSettings, recents: RecentsStore) {
+    init(
+        settings: AppSettings, recents: GifListStore = .recents,
+        favorites: GifListStore = .favorites
+    ) {
         self.settings = settings
         self.recents = recents
+        self.favorites = favorites
+        favoriteIDs = Set(favorites.gifs.map(\.id))
+    }
+
+    /// The highlighted GIF, if any.
+    var selected: Gif? {
+        guard let selection, items.indices.contains(selection) else { return nil }
+        return items[selection]
     }
 
     /// The GIF that Return sends: the highlighted one, or the top result.
-    var choice: Gif? {
-        if let selection, items.indices.contains(selection) { return items[selection] }
-        return items.first
-    }
+    var choice: Gif? { selected ?? items.first }
 
     var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -73,6 +107,7 @@ final class SearchModel: ObservableObject {
     func panelDidOpen() {
         message = nil
         sendingID = nil
+        previewing = false
         focusToken += 1
         if query.isEmpty { reload() } else { search("") }
     }
@@ -93,6 +128,44 @@ final class SearchModel: ObservableObject {
         return true
     }
 
+    func isFavorite(_ gif: Gif) -> Bool {
+        favoriteIDs.contains(gif.id)
+    }
+
+    func toggleFavorite(_ gif: Gif) {
+        if favorites.contains(gif.id) {
+            favorites.remove(gif.id)
+        } else {
+            favorites.add(gif)
+        }
+        favoriteIDs = Set(favorites.gifs.map(\.id))
+        guard tab == .favorites else { return }
+        // The list itself just changed; keep the highlight near where it was.
+        let previous = selection
+        reload()
+        if let previous, !items.isEmpty { selection = min(previous, items.count - 1) }
+    }
+
+    func noteKeyPress() {
+        pointerAtLastKey = NSEvent.mouseLocation
+    }
+
+    /// The pointer is over a GIF: make it the selection, so Space, Return and ⌘D act on
+    /// what's being pointed at. Ignored until the pointer has moved since the last key.
+    func hover(index: Int) {
+        guard !previewing, selection != index, items.indices.contains(index),
+            pointerAtLastKey != NSEvent.mouseLocation
+        else { return }
+        selectionFromPointer = true
+        selection = index
+    }
+
+    func preview(index: Int) {
+        guard items.indices.contains(index) else { return }
+        selection = index
+        previewing = true
+    }
+
     func reload(debounce: Bool = false) {
         task?.cancel()
         suggestionTask?.cancel()
@@ -104,9 +177,10 @@ final class SearchModel: ObservableObject {
         loadingMore = false
         message = nil
 
-        if tab == .recent {
+        if tab.isLocal {
+            let saved = tab == .recent ? recents.gifs : favorites.gifs
             let q = trimmedQuery.lowercased()
-            items = q.isEmpty ? recents.gifs : recents.gifs.filter { $0.title.lowercased().contains(q) }
+            items = q.isEmpty ? saved : saved.filter { $0.title.lowercased().contains(q) }
             suggestions = []
             isLoading = false
             return
@@ -193,6 +267,7 @@ final class SearchModel: ObservableObject {
     /// Returns false when the key should fall through to the search field.
     func move(_ move: Move) -> Bool {
         guard !items.isEmpty else { return false }
+        selectionFromPointer = false
         let cols = Self.columns
         switch (move, selection) {
         case (.down, nil):
