@@ -1,3 +1,5 @@
+import AppKit
+import Carbon.HIToolbox
 import Combine
 import GipherCore
 import ServiceManagement
@@ -25,8 +27,13 @@ struct SettingsView: View {
                 }
             }
             Section("Shortcut") {
-                Picker("Open search", selection: $settings.hotkey) {
-                    ForEach(HotkeyPreset.allCases) { Text($0.label).tag($0) }
+                LabeledContent("Open search") {
+                    HotkeyRecorder(settings: settings)
+                }
+                if settings.hotkeyConflict {
+                    Text("\(settings.hotkey.label) is already used by another app. Pick a different shortcut.")
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
             }
             Section("Pasting") {
@@ -45,6 +52,9 @@ struct SettingsView: View {
                 }
             }
             Section("General") {
+                Picker("Appearance", selection: $settings.appearance) {
+                    ForEach(AppearanceChoice.allCases) { Text($0.label).tag($0) }
+                }
                 Toggle("Open at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in setLaunchAtLogin(enabled) }
                 if let loginError {
@@ -71,5 +81,65 @@ struct SettingsView: View {
             loginError = "Couldn't change the login item: \(error.localizedDescription)"
             launchAtLogin = SMAppService.mainApp.status == .enabled
         }
+    }
+}
+
+/// A button that shows the current shortcut; click it, then press the new one.
+struct HotkeyRecorder: View {
+    @ObservedObject var settings: AppSettings
+    @State private var recording = false
+    @State private var monitor: Any?
+    @State private var rejected = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if recording {
+                Text(rejected ? "Include ⌘, ⌥ or ⌃" : "Press a shortcut… (esc to cancel)")
+                    .font(.caption)
+                    .foregroundStyle(rejected ? .red : .secondary)
+            }
+            Button(recording ? "Recording" : settings.hotkey.label) {
+                recording ? stop() : start()
+            }
+            .font(.system(.body, design: .rounded).weight(.semibold))
+            .help("Click, then press the shortcut you want")
+        }
+        .onDisappear(perform: stop)
+    }
+
+    private func start() {
+        recording = true
+        rejected = false
+        settings.hotkeyPaused = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if Int(event.keyCode) == kVK_Escape {
+                stop()
+                return nil
+            }
+            var modifiers: UInt32 = 0
+            if event.modifierFlags.contains(.command) { modifiers |= Hotkey.command }
+            if event.modifierFlags.contains(.shift) { modifiers |= Hotkey.shift }
+            if event.modifierFlags.contains(.option) { modifiers |= Hotkey.option }
+            if event.modifierFlags.contains(.control) { modifiers |= Hotkey.control }
+            let keyCode = UInt32(event.keyCode)
+            let candidate = Hotkey(
+                keyCode: keyCode, modifiers: modifiers,
+                keyLabel: Hotkey.keyName(
+                    keyCode: keyCode, characters: event.charactersIgnoringModifiers))
+            if candidate.isUsable {
+                settings.hotkey = candidate
+                stop()
+            } else {
+                rejected = true
+            }
+            return nil
+        }
+    }
+
+    private func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        recording = false
+        if settings.hotkeyPaused { settings.hotkeyPaused = false }
     }
 }

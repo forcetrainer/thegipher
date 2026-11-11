@@ -15,15 +15,27 @@ struct SearchView: View {
         VStack(spacing: 0) {
             header
             if !model.suggestions.isEmpty { suggestionBar }
-            content.frame(maxWidth: .infinity, maxHeight: .infinity)
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay {
+                    if model.previewing, let gif = model.selected {
+                        PreviewOverlay(
+                            gif: gif, quality: settings.sendQuality,
+                            isFavorite: model.isFavorite(gif)
+                        )
+                        .onTapGesture { model.previewing = false }
+                        .transition(.opacity)
+                    }
+                }
+                .animation(.easeOut(duration: 0.12), value: model.previewing)
             footer
         }
         .background(Theme.backdrop)
         .overlay(
             RoundedRectangle(cornerRadius: Theme.panelRadius)
-                .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                .strokeBorder(Color.primary.opacity(0.14), lineWidth: 1)
         )
-        .tint(Theme.gold)
+        .tint(Theme.accent)
         .onAppear { searchFocused = true }
         .onChange(of: model.focusToken) { searchFocused = true }
     }
@@ -35,8 +47,8 @@ struct SearchView: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Theme.gold)
-                TextField("Search GIPHY", text: $model.query)
+                    .foregroundStyle(Theme.accentText)
+                TextField(searchPrompt, text: $model.query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 18, weight: .medium))
                     .focused($searchFocused)
@@ -56,9 +68,9 @@ struct SearchView: View {
             }
             .padding(.horizontal, 12)
             .frame(height: 40)
-            .background(Color.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 11))
+            .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 11))
             .overlay(
-                RoundedRectangle(cornerRadius: 11).strokeBorder(Color.white.opacity(0.08))
+                RoundedRectangle(cornerRadius: 11).strokeBorder(Color.primary.opacity(0.08))
             )
             tabs
         }
@@ -66,6 +78,14 @@ struct SearchView: View {
         .padding(.top, 14)
         .padding(.bottom, 10)
         .background(WindowDragHandle())
+    }
+
+    private var searchPrompt: String {
+        switch model.tab {
+        case .gifs, .stickers: return "Search GIPHY"
+        case .favorites: return "Filter favorites"
+        case .recent: return "Filter recent"
+        }
     }
 
     private var tabs: some View {
@@ -77,12 +97,12 @@ struct SearchView: View {
                 } label: {
                     Text(tab.label)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(selected ? Theme.navy : Color.white.opacity(0.7))
-                        .padding(.horizontal, 11)
+                        .foregroundStyle(selected ? Theme.onAccent : Color.primary.opacity(0.7))
+                        .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background {
                             if selected {
-                                Capsule().fill(Theme.gold)
+                                Capsule().fill(Theme.accent)
                                     .matchedGeometryEffect(id: "pill", in: tabPill)
                             }
                         }
@@ -93,7 +113,7 @@ struct SearchView: View {
             }
         }
         .padding(3)
-        .background(Color.white.opacity(0.09), in: Capsule())
+        .background(Color.primary.opacity(0.08), in: Capsule())
     }
 
     // MARK: Suggestions
@@ -103,7 +123,7 @@ struct SearchView: View {
             HStack(spacing: 6) {
                 Image(systemName: model.trimmedQuery.isEmpty ? "flame.fill" : "sparkles")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.gold)
+                    .foregroundStyle(Theme.accentText)
                     .help(model.trimmedQuery.isEmpty ? "Trending searches" : "Suggested searches")
                 ForEach(model.suggestions, id: \.self) { term in
                     SuggestionChip(term: term) {
@@ -121,7 +141,7 @@ struct SearchView: View {
 
     @ViewBuilder
     private var content: some View {
-        if settings.apiKey.isEmpty && model.tab != .recent {
+        if settings.apiKey.isEmpty && !model.tab.isLocal {
             KeySetupView(settings: settings) { model.reload() }
         } else if !model.items.isEmpty {
             grid
@@ -137,16 +157,20 @@ struct SearchView: View {
             if let message = model.message {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 30))
-                    .foregroundStyle(Theme.gold)
+                    .foregroundStyle(Theme.accentText)
                 Text(message)
+            } else if model.tab.isLocal && !model.query.isEmpty {
+                Text("Nothing here matches “\(model.trimmedQuery)”.")
+            } else if model.tab == .favorites {
+                Image(systemName: "star.fill").font(.system(size: 30))
+                    .foregroundStyle(Theme.accentText)
+                Text("No favorites yet.\nHover a GIF and click its star, or press ⌘D on the highlighted one.")
             } else if model.tab == .recent {
                 Wordmark(size: 26)
-                Text(model.query.isEmpty
-                    ? "GIFs you send will show up here.\n\(Theme.tagline)"
-                    : "No recent GIFs match “\(model.trimmedQuery)”.")
+                Text("GIFs you send will show up here.\n\(Theme.tagline)")
             } else {
-                Text("Fumble.").font(.system(size: 26, weight: .black, design: .rounded)).italic()
-                    .foregroundStyle(Theme.gold)
+                Text("Fumble.").font(.system(size: 26, weight: .black, design: .rounded))
+                    .foregroundStyle(Theme.accentText)
                 Text("Nothing on GIPHY for “\(model.trimmedQuery)”.")
             }
         }
@@ -159,7 +183,7 @@ struct SearchView: View {
         LazyVGrid(columns: gridColumns, spacing: 8) {
             ForEach(0..<12, id: \.self) { _ in
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.white.opacity(0.07))
+                    .fill(Color.primary.opacity(0.07))
                     .frame(height: GifCell.height)
             }
         }
@@ -176,21 +200,31 @@ struct SearchView: View {
             ScrollView {
                 LazyVGrid(columns: gridColumns, spacing: 8) {
                     ForEach(Array(model.items.enumerated()), id: \.element.id) { index, gif in
+                        let favorite = model.isFavorite(gif)
                         GifCell(
                             gif: gif,
                             fit: model.tab == .stickers,
                             selected: model.selection == index,
-                            sending: model.sendingID == gif.id
+                            sending: model.sendingID == gif.id,
+                            favorite: favorite,
+                            toggleFavorite: { model.toggleFavorite(gif) }
                         )
                         .id(gif.id)
-                        .onTapGesture { model.onSend?(gif) }
+                        .onTapGesture { model.onSend?(gif, .paste) }
                         .onDrag {
                             Paster.dragProvider(for: gif, quality: settings.sendQuality)
                         }
                         .contextMenu {
-                            Button("Paste") { model.onSend?(gif) }
-                            Button("Copy GIF") { model.onCopyOnly?(gif) }
+                            Button("Paste") { model.onSend?(gif, .paste) }
+                            Button("Paste and Send") { model.onSend?(gif, .pasteAndSend) }
+                            Button("Copy GIF") { model.onSend?(gif, .copyOnly) }
+                            Divider()
+                            Button("Preview") { model.preview(index: index) }
+                            Button(favorite ? "Remove from Favorites" : "Add to Favorites") {
+                                model.toggleFavorite(gif)
+                            }
                             if let page = gif.url {
+                                Divider()
                                 Button("Copy GIPHY Link") { Paster.copy(text: page.absoluteString) }
                                 Button("Open on GIPHY") { NSWorkspace.shared.open(page) }
                             }
@@ -217,13 +251,13 @@ struct SearchView: View {
         HStack(spacing: 10) {
             Wordmark()
             if let message = model.message, !model.items.isEmpty {
-                Text(message).foregroundStyle(Theme.gold)
+                Text(message).foregroundStyle(Theme.accentText)
             } else {
                 hint("↩", "paste")
-                hint("↓", "browse")
+                hint("⌘↩", "send")
+                hint("space", "preview")
+                hint("⌘D", "favorite")
                 hint("tab", "complete")
-                hint("drag", "drop anywhere")
-                hint("esc", "close")
             }
             Spacer()
             Text("Powered by GIPHY")
@@ -233,7 +267,7 @@ struct SearchView: View {
         .lineLimit(1)
         .padding(.horizontal, 16)
         .padding(.vertical, 9)
-        .background(Color.black.opacity(0.22))
+        .background(Theme.footer)
         .background(WindowDragHandle())
     }
 
@@ -254,10 +288,10 @@ private struct SuggestionChip: View {
         Button(action: action) {
             Text(term)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(hovering ? Theme.navy : Color.white.opacity(0.85))
+                .foregroundStyle(hovering ? Theme.onAccent : Color.primary.opacity(0.85))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(hovering ? Theme.gold : Color.white.opacity(0.10), in: Capsule())
+                .background(hovering ? Theme.accent : Color.primary.opacity(0.09), in: Capsule())
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -274,6 +308,8 @@ private struct GifCell: View {
     let fit: Bool
     let selected: Bool
     let sending: Bool
+    let favorite: Bool
+    let toggleFavorite: () -> Void
     @State private var image: NSImage?
     @State private var hovering = false
 
@@ -282,7 +318,7 @@ private struct GifCell: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                Color.white.opacity(0.07)
+                Color.primary.opacity(0.07)
                 if let image {
                     let size = imageSize(in: geo.size, image: image)
                     AnimatedImageView(image: image)
@@ -303,10 +339,13 @@ private struct GifCell: View {
         .overlay(
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(
-                    selected ? Theme.gold : Color.white.opacity(hovering ? 0.55 : 0),
+                    selected ? Theme.accent : Color.primary.opacity(hovering ? 0.5 : 0),
                     lineWidth: selected ? 3 : 2)
         )
-        .shadow(color: .black.opacity(lifted ? 0.45 : 0), radius: 8, y: 4)
+        .overlay(alignment: .topTrailing) {
+            if favorite || hovering { star }
+        }
+        .shadow(color: .black.opacity(lifted ? 0.35 : 0), radius: 8, y: 4)
         .scaleEffect(lifted ? 1.04 : 1)
         .zIndex(lifted ? 1 : 0)
         .animation(.snappy(duration: 0.16), value: lifted)
@@ -321,6 +360,20 @@ private struct GifCell: View {
         }
     }
 
+    private var star: some View {
+        Button(action: toggleFavorite) {
+            Image(systemName: favorite ? "star.fill" : "star")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(favorite ? Color(red: 0.98, green: 0.76, blue: 0.20) : .white)
+                .frame(width: 22, height: 22)
+                .background(Color.black.opacity(0.55), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .padding(5)
+        .help(favorite ? "Remove from Favorites" : "Add to Favorites")
+    }
+
     /// Fill the cell (cropping overflow) for GIFs; fit inside it for transparent stickers.
     private func imageSize(in cell: CGSize, image: NSImage) -> CGSize {
         let fallback = image.size.height > 0 ? image.size.width / image.size.height : 1
@@ -330,6 +383,87 @@ private struct GifCell: View {
         return matchWidth
             ? CGSize(width: cell.width, height: cell.width / aspect)
             : CGSize(width: cell.height * aspect, height: cell.height)
+    }
+}
+
+/// The highlighted GIF, uncropped and as large as the panel allows.
+private struct PreviewOverlay: View {
+    let gif: Gif
+    let quality: SendQuality
+    let isFavorite: Bool
+    @State private var image: NSImage?
+    @State private var sharp = false
+
+    var body: some View {
+        ZStack {
+            Theme.scrim
+            VStack(spacing: 10) {
+                GeometryReader { geo in
+                    let size = fitted(in: geo.size)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.07))
+                        if let image {
+                            AnimatedImageView(image: image)
+                        } else {
+                            ProgressView()
+                        }
+                    }
+                    .frame(width: size.width, height: size.height)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: .black.opacity(0.35), radius: 16, y: 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                HStack(spacing: 6) {
+                    if isFavorite {
+                        Image(systemName: "star.fill").foregroundStyle(Theme.accentText)
+                    }
+                    Text(gif.title.isEmpty ? "Untitled GIF" : gif.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                }
+                Text(details)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 14)
+            .padding(.bottom, 12)
+        }
+        .contentShape(Rectangle())
+        .task(id: gif.id) {
+            // Show the grid's small copy at once, then swap in the full-quality one.
+            image = nil
+            sharp = false
+            if let small = gif.preview?.url, let data = await ImageLoader.shared.data(for: small),
+                !sharp
+            {
+                image = NSImage(data: data)
+            }
+            if let large = rendition?.url, let data = await ImageLoader.shared.data(for: large) {
+                sharp = true
+                image = NSImage(data: data)
+            }
+        }
+    }
+
+    private var rendition: Rendition? { gif.sendRendition(quality) }
+
+    private var details: String {
+        var parts: [String] = []
+        if let r = rendition, let width = r.width, let height = r.height, width > 0 {
+            parts.append("\(width) × \(height)")
+        }
+        if let bytes = rendition?.size, bytes > 0 {
+            parts.append(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file))
+        }
+        parts.append("space or esc to close")
+        return parts.joined(separator: "  ·  ")
+    }
+
+    private func fitted(in area: CGSize) -> CGSize {
+        let aspect = rendition?.aspectRatio ?? gif.preview?.aspectRatio ?? 1
+        let width = min(area.width, area.height * aspect)
+        return CGSize(width: width, height: width / aspect)
     }
 }
 
@@ -351,7 +485,7 @@ struct KeySetupView: View {
                 .foregroundStyle(.secondary)
             Link("Open developers.giphy.com/dashboard",
                  destination: URL(string: "https://developers.giphy.com/dashboard/")!)
-                .foregroundStyle(Theme.gold)
+                .foregroundStyle(Theme.accentText)
             HStack {
                 TextField("GIPHY API key", text: $draft)
                     .textFieldStyle(.roundedBorder)
@@ -359,7 +493,7 @@ struct KeySetupView: View {
                     .onSubmit(save)
                 Button("Save", action: save)
                     .buttonStyle(.borderedProminent)
-                    .foregroundStyle(Theme.navy)
+                    .foregroundStyle(Theme.onAccent)
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }

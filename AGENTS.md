@@ -26,6 +26,10 @@ menu bar app (SwiftPM, AppKit + SwiftUI, no dependencies). See README.md for usa
 - The hotkey uses Carbon `RegisterEventHotKey` because it needs no privacy
   permission. Only the synthetic ⌘V needs Accessibility.
 - macOS has no third-party Messages extension point; don't try to build one.
+- Colors come from `Theme` and each has a light and dark variant. Don't hard-code
+  white/black overlays in views; use `Color.primary.opacity(...)` or a `Theme` color.
+- After a UI change, render it with the debug `--snapshot` mode (see README) and look
+  at both `--light` and dark before calling it done.
 
 ## Setup notes
 

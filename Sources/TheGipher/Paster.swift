@@ -69,7 +69,7 @@ enum Paster {
                 do {
                     let file = try await fetch.value
                     completion(file, false, nil)
-                    await MainActor.run { RecentsStore.shared.add(gif) }
+                    await MainActor.run { GifListStore.recents.add(gif) }
                 } catch {
                     completion(nil, false, error)
                 }
@@ -109,11 +109,19 @@ enum Paster {
     }
 
     static func pressPaste() {
+        press(kVK_ANSI_V, flags: .maskCommand)
+    }
+
+    static func pressReturn() {
+        press(kVK_Return, flags: [])
+    }
+
+    private static func press(_ key: Int, flags: CGEventFlags) {
         let source = CGEventSource(stateID: .combinedSessionState)
-        let key = CGKeyCode(kVK_ANSI_V)
         for keyDown in [true, false] {
-            let event = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: keyDown)
-            event?.flags = .maskCommand
+            let event = CGEvent(
+                keyboardEventSource: source, virtualKey: CGKeyCode(key), keyDown: keyDown)
+            event?.flags = flags
             event?.post(tap: .cghidEventTap)
         }
     }

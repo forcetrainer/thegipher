@@ -114,6 +114,33 @@ final class GipherCoreTests: XCTestCase {
         XCTAssertEqual(c.queryItems?.first { $0.name == "q" }?.value, "happy b")
     }
 
+    func testHotkeyLabels() {
+        XCTAssertEqual(Hotkey.default.label, "⌥⌘G")
+        let all = Hotkey.control | Hotkey.option | Hotkey.shift | Hotkey.command
+        XCTAssertEqual(Hotkey(keyCode: 49, modifiers: all, keyLabel: "Space").label, "⌃⌥⇧⌘Space")
+    }
+
+    func testHotkeyKeyNames() {
+        XCTAssertEqual(Hotkey.keyName(keyCode: 5, characters: "g"), "G")
+        XCTAssertEqual(Hotkey.keyName(keyCode: 49, characters: " "), "Space")
+        XCTAssertEqual(Hotkey.keyName(keyCode: 96, characters: "\u{F708}"), "F5")
+        XCTAssertEqual(Hotkey.keyName(keyCode: 126, characters: nil), "↑")
+    }
+
+    func testHotkeyNeedsARealModifier() {
+        XCTAssertTrue(Hotkey.default.isUsable)
+        XCTAssertFalse(Hotkey(keyCode: 5, modifiers: 0, keyLabel: "G").isUsable)
+        XCTAssertFalse(Hotkey(keyCode: 5, modifiers: Hotkey.shift, keyLabel: "G").isUsable)
+        XCTAssertTrue(Hotkey(keyCode: 96, modifiers: 0, keyLabel: "F5").isUsable, "function keys may stand alone")
+        XCTAssertFalse(Hotkey(keyCode: 5, modifiers: Hotkey.command, keyLabel: "").isUsable)
+    }
+
+    func testLegacyHotkeyPresetsMigrate() {
+        XCTAssertEqual(Hotkey.legacy("optCmdG"), .default)
+        XCTAssertEqual(Hotkey.legacy("ctrlOptSpace")?.label, "⌃⌥Space")
+        XCTAssertNil(Hotkey.legacy("nonsense"))
+    }
+
     func testGifRoundTripsThroughCodable() throws {
         let gif = try GiphyClient.decodePage(fixture).gifs[0]
         let again = try JSONDecoder().decode(Gif.self, from: JSONEncoder().encode(gif))

@@ -7,7 +7,8 @@ import SwiftUI
 /// search panel offscreen with fixed content, to check layout without launching the app.
 /// `--snapshot live <out.png> [query]` runs a real G-rated search with the installed
 /// app's API key instead, for README screenshots.
-/// (The blurred backdrop doesn't render offscreen; a flat navy stands in.)
+/// Add `--light` for light mode and, with `live`, `--preview` to show the large preview.
+/// (The blurred backdrop doesn't render offscreen; a flat color stands in.)
 @MainActor
 enum Snapshot {
     static func runIfRequested() -> Bool {
@@ -20,7 +21,9 @@ enum Snapshot {
 
         _ = NSApplication.shared
         let settings = AppSettings.shared
-        let model = SearchModel(settings: settings, recents: RecentsStore.shared)
+        let model = SearchModel(settings: settings)
+        let appearance = NSAppearance(named: args.contains("--light") ? .aqua : .darkAqua)
+        NSApp.appearance = appearance
         // The Recent tab needs no API key, so it can show any content offline.
         model.tab = .recent
         switch state {
@@ -40,7 +43,8 @@ enum Snapshot {
                 UserDefaults(suiteName: "com.thegipher.app")?.string(forKey: "apiKey") ?? ""
             settings.rating = .g
             model.tab = .gifs
-            model.search(args.count > flag + 3 ? args[flag + 3] : "")
+            let term = args.count > flag + 3 && !args[flag + 3].hasPrefix("--") ? args[flag + 3] : ""
+            model.search(term)
         default:
             model.loadSnapshot(items: [], suggestions: [], selection: nil)
         }
@@ -48,17 +52,21 @@ enum Snapshot {
         let size = NSSize(width: 760, height: 540)
         let root = SearchView(model: model, settings: settings)
             .frame(width: size.width, height: size.height)
-            .background(Color(red: 0.07, green: 0.10, blue: 0.22))
+            .background(Theme.snapshotBase)
             .clipShape(RoundedRectangle(cornerRadius: Theme.panelRadius))
         let host = NSHostingView(rootView: root)
         host.frame = NSRect(origin: .zero, size: size)
         let window = NSWindow(
             contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.appearance = NSAppearance(named: .darkAqua)
+        window.appearance = appearance
         window.contentView = host
         host.layoutSubtreeIfNeeded()
         // Live searches need time for results and their previews to arrive.
         RunLoop.current.run(until: Date().addingTimeInterval(state == "live" ? 8 : 0.6))
+        if args.contains("--preview") {
+            model.preview(index: 2)
+            RunLoop.current.run(until: Date().addingTimeInterval(5))
+        }
 
         // Render at 2x for a crisp image.
         guard
