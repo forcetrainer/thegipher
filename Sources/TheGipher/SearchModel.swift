@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import GipherCore
 
@@ -56,6 +57,14 @@ final class SearchModel: ObservableObject {
     @Published private(set) var focusToken = 0
 
     var onSend: ((Gif, SendMode) -> Void)?
+
+    /// True when the pointer, not the keyboard, made the current selection. The grid
+    /// scrolls to follow keyboard selection only.
+    private(set) var selectionFromPointer = false
+    /// Where the pointer was at the last key press. Results load and scroll underneath
+    /// a resting pointer, and that must not count as pointing at a GIF: it would
+    /// hijack the space bar mid-search and fight the arrow keys.
+    private var pointerAtLastKey: CGPoint?
 
     private let settings: AppSettings
     private let recents: GifListStore
@@ -135,6 +144,20 @@ final class SearchModel: ObservableObject {
         let previous = selection
         reload()
         if let previous, !items.isEmpty { selection = min(previous, items.count - 1) }
+    }
+
+    func noteKeyPress() {
+        pointerAtLastKey = NSEvent.mouseLocation
+    }
+
+    /// The pointer is over a GIF: make it the selection, so Space, Return and ⌘D act on
+    /// what's being pointed at. Ignored until the pointer has moved since the last key.
+    func hover(index: Int) {
+        guard !previewing, selection != index, items.indices.contains(index),
+            pointerAtLastKey != NSEvent.mouseLocation
+        else { return }
+        selectionFromPointer = true
+        selection = index
     }
 
     func preview(index: Int) {
@@ -244,6 +267,7 @@ final class SearchModel: ObservableObject {
     /// Returns false when the key should fall through to the search field.
     func move(_ move: Move) -> Bool {
         guard !items.isEmpty else { return false }
+        selectionFromPointer = false
         let cols = Self.columns
         switch (move, selection) {
         case (.down, nil):

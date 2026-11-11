@@ -10,6 +10,8 @@ struct SettingsView: View {
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var canAutoPaste = Paster.canAutoPaste
     @State private var loginError: String?
+    /// Menu commands in open apps that use the same shortcut.
+    @State private var menuClashes: [String] = []
 
     private let refresh = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
 
@@ -31,10 +33,25 @@ struct SettingsView: View {
                     HotkeyRecorder(settings: settings)
                 }
                 if settings.hotkeyConflict {
-                    Text("\(settings.hotkey.label) is already used by another app. Pick a different shortcut.")
+                    Text("\(settings.hotkey.label) couldn't be registered. Pick a different shortcut.")
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
+                if !menuClashes.isEmpty {
+                    Label {
+                        Text("Also used by \(menuClashes.joined(separator: ", ")). TheGipher's shortcut wins, so that command won't respond to it.")
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    }
+                    .font(.caption)
+                }
+                Text("Checked against macOS shortcuts and the menus of open apps. Shortcuts claimed by background tools like launchers or clipboard managers can't be detected.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .task(id: settings.hotkey) {
+                menuClashes = []
+                menuClashes = await HotkeyConflicts.menuCommands(using: settings.hotkey)
             }
             Section("Pasting") {
                 LabeledContent("Automatic paste") {
@@ -89,14 +106,16 @@ struct HotkeyRecorder: View {
     @ObservedObject var settings: AppSettings
     @State private var recording = false
     @State private var monitor: Any?
-    @State private var rejected = false
+    /// Why the last attempt was turned down, if it was.
+    @State private var rejection: String?
 
     var body: some View {
         HStack(spacing: 8) {
             if recording {
-                Text(rejected ? "Include ⌘, ⌥ or ⌃" : "Press a shortcut… (esc to cancel)")
+                Text(rejection ?? "Press a shortcut… (esc to cancel)")
                     .font(.caption)
-                    .foregroundStyle(rejected ? .red : .secondary)
+                    .foregroundStyle(rejection == nil ? Color.secondary : Color.red)
+                    .multilineTextAlignment(.trailing)
             }
             Button(recording ? "Recording" : settings.hotkey.label) {
                 recording ? stop() : start()
@@ -109,7 +128,7 @@ struct HotkeyRecorder: View {
 
     private func start() {
         recording = true
-        rejected = false
+        rejection = nil
         settings.hotkeyPaused = true
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if Int(event.keyCode) == kVK_Escape {
@@ -126,11 +145,13 @@ struct HotkeyRecorder: View {
                 keyCode: keyCode, modifiers: modifiers,
                 keyLabel: Hotkey.keyName(
                     keyCode: keyCode, characters: event.charactersIgnoringModifiers))
-            if candidate.isUsable {
+            if !candidate.isUsable {
+                rejection = "Include ⌘, ⌥ or ⌃"
+            } else if HotkeyConflicts.usedBySystem(candidate) {
+                rejection = "macOS already uses \(candidate.label). Try another."
+            } else {
                 settings.hotkey = candidate
                 stop()
-            } else {
-                rejected = true
             }
             return nil
         }

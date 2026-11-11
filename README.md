@@ -79,8 +79,8 @@ To start it automatically, turn on **Open at login** in Settings.
 | ↩ | Paste the highlighted GIF, or the top result if none is highlighted |
 | ⌘↩ | Paste it and send the message |
 | ↓ ↑ ← → | Move through the results |
-| space | Preview the highlighted GIF large (space or esc to go back) |
-| ⌘D | Add the highlighted GIF to Favorites, or remove it |
+| space | Preview the GIF you're pointing at or have highlighted, large (space or esc to go back) |
+| ⌘D | Add that GIF to Favorites, or remove it |
 | tab | Complete what you've typed with the first suggestion |
 | ⌘1 / ⌘2 / ⌘3 / ⌘4 | GIFs / Stickers / Favorites / Recent |
 | esc | Close |
@@ -88,6 +88,11 @@ To start it automatically, turn on **Open at login** in Settings.
 With the mouse: click a GIF to paste it, drag it to drop it somewhere, click the star
 that appears on hover to favorite it, or right-click for the rest (**Paste and Send**,
 **Copy GIF**, **Preview**, **Copy GIPHY Link**, **Open on GIPHY**).
+
+Pointing at a GIF highlights it, the same as reaching it with the arrow keys, so
+Space, ↩, ⌘↩ and ⌘D all act on whatever the pointer is over. (A pointer that's merely
+resting where results appear doesn't count until you move it, so Space still types a
+space while you're mid-search.)
 
 In the Favorites and Recent tabs, typing filters the list by title.
 
@@ -98,6 +103,12 @@ you can park it beside your conversations.
 size, hotkey, appearance, and open-at-login. To change the hotkey, click it and press
 the new combination; it needs ⌘, ⌥ or ⌃ (or a function key).
 
+Settings checks a new shortcut for clashes: it refuses ones macOS itself uses
+(Spotlight, screenshots, and so on) and warns when a menu command in an open app uses
+the same keys, naming the app and command. It can't see shortcuts claimed by
+background tools such as launchers or clipboard managers, because macOS has no way to
+list those; if both respond to the same keys, change one of them.
+
 ## Good to know
 
 - **Rate limit.** GIPHY's free key allows about 100 requests an hour. A new search
@@ -107,8 +118,9 @@ the new combination; it needs ⌘, ⌥ or ⌃ (or a function key).
   Your API key, favorites and recent GIFs are stored on your Mac, in the app's
   preferences.
   There are no accounts and no analytics.
-- **The Accessibility permission** is used for one thing: pressing ⌘V (and Return,
-  for paste-and-send) in the app you were typing in.
+- **The Accessibility permission** is used to press ⌘V (and Return, for
+  paste-and-send) in the app you were typing in, and to read the menu shortcuts of
+  open apps when Settings checks your hotkey for clashes.
 - **Paste and send** waits a little over half a second between pasting and pressing
   Return, to give the GIF time to attach. If a message ever goes out without its
   GIF, the app you're pasting into needed longer.
