@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import GipherCore
 import SwiftUI
 
 @MainActor
@@ -13,25 +14,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var subscriptions = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        panel = PanelController(settings: settings, recents: RecentsStore.shared)
+        panel = PanelController(settings: settings)
         buildMainMenu()
         buildStatusItem()
 
         hotKey.onPress = { [weak self] in self?.panel.toggle() }
-        settings.$hotkey
-            .removeDuplicates()
-            .sink { [weak self] preset in self?.registerHotkey(preset) }
+        settings.$hotkey.combineLatest(settings.$hotkeyPaused)
+            .removeDuplicates { $0 == $1 }
+            .sink { [weak self] hotkey, paused in self?.registerHotkey(hotkey, paused: paused) }
+            .store(in: &subscriptions)
+        settings.$appearance
+            .sink { NSApp.appearance = $0.nsAppearance }
             .store(in: &subscriptions)
 
         Paster.pruneOutbox()
         if settings.apiKey.isEmpty { panel.show() }
     }
 
-    private func registerHotkey(_ preset: HotkeyPreset) {
-        let ok = hotKey.register(keyCode: preset.keyCode, modifiers: preset.carbonModifiers)
+    private func registerHotkey(_ hotkey: Hotkey, paused: Bool) {
+        // Paused while Settings records a new shortcut, so pressing the old one
+        // records it instead of opening the panel.
+        guard !paused else {
+            hotKey.unregister()
+            return
+        }
+        let ok = hotKey.register(keyCode: hotkey.keyCode, modifiers: hotkey.modifiers)
         searchMenuItem.title = ok
-            ? "Search GIFs   \(preset.label)"
-            : "Search GIFs   (\(preset.label) is taken — pick another in Settings)"
+            ? "Search GIFs   \(hotkey.label)"
+            : "Search GIFs   (\(hotkey.label) is taken — pick another in Settings)"
+        // Deferred: this runs while `settings` is mid-change.
+        DispatchQueue.main.async { [settings] in
+            if settings.hotkeyConflict != !ok { settings.hotkeyConflict = !ok }
+        }
     }
 
     private func buildStatusItem() {

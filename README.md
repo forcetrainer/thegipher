@@ -10,7 +10,8 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.png" width="760" alt="The TheGipher search panel showing results for “touchdown”">
+  <img src="docs/screenshot.png" width="49%" alt="The TheGipher search panel in dark mode, showing results for “touchdown”">
+  <img src="docs/screenshot-light.png" width="49%" alt="The same panel in light mode">
 </p>
 
 Messages on the Mac only offers Apple's own small, filtered GIF search, and macOS has
@@ -29,12 +30,18 @@ It isn't tied to Messages. It works in any app that accepts a pasted or dropped 
 - **The whole GIPHY library**: GIFs and stickers, trending when you haven't typed
   anything, endless scrolling when you have.
 - **One-key paste**: Return downloads the GIF and pastes it straight into the app you
-  were in. Fully usable without the mouse.
+  were in. ⌘Return also presses Return for you, so the GIF is sent in one keystroke.
+  Fully usable without the mouse.
+- **Large preview**: Space shows the highlighted GIF uncropped and full size before
+  you commit to it.
+- **Favorites**: star the GIFs you reach for most and find them in their own tab.
 - **Drag and drop**: drag any GIF out of the panel into a conversation, a document, or
   onto the desktop.
 - **Suggested searches**: trending searches when the field is empty, completions of
   what you've typed otherwise. Click one, or press Tab to take the first.
 - **Recent**: the GIFs you've sent, ready to send again.
+- **Any shortcut you like**: record your own hotkey in Settings.
+- **Light and dark**: follows the system, or pick one.
 - **Your choice of filtering**: content rating from G to R (R, the least filtered, is
   the default).
 - **Paste size**: original quality, or smaller files for slow connections.
@@ -70,19 +77,26 @@ To start it automatically, turn on **Open at login** in Settings.
 | ⌥⌘G | Open or close the panel (changeable in Settings) |
 | type | Search |
 | ↩ | Paste the highlighted GIF, or the top result if none is highlighted |
+| ⌘↩ | Paste it and send the message |
 | ↓ ↑ ← → | Move through the results |
+| space | Preview the highlighted GIF large (space or esc to go back) |
+| ⌘D | Add the highlighted GIF to Favorites, or remove it |
 | tab | Complete what you've typed with the first suggestion |
-| ⌘1 / ⌘2 / ⌘3 | GIFs / Stickers / Recent |
+| ⌘1 / ⌘2 / ⌘3 / ⌘4 | GIFs / Stickers / Favorites / Recent |
 | esc | Close |
 
-With the mouse: click a GIF to paste it, drag it to drop it somewhere, or right-click
-for **Copy GIF**, **Copy GIPHY Link** and **Open on GIPHY**.
+With the mouse: click a GIF to paste it, drag it to drop it somewhere, click the star
+that appears on hover to favorite it, or right-click for the rest (**Paste and Send**,
+**Copy GIF**, **Preview**, **Copy GIPHY Link**, **Open on GIPHY**).
+
+In the Favorites and Recent tabs, typing filters the list by title.
 
 Drag the panel by its top or bottom edge to move it. It reopens where you left it, so
 you can park it beside your conversations.
 
 **Settings** (menu bar **GIF** › Settings…) has the API key, content rating, paste
-size, hotkey, and open-at-login.
+size, hotkey, appearance, and open-at-login. To change the hotkey, click it and press
+the new combination; it needs ⌘, ⌥ or ⌃ (or a function key).
 
 ## Good to know
 
@@ -90,10 +104,14 @@ size, hotkey, and open-at-login.
   uses two (results plus suggestions), and each further page of results uses one.
   Suggestions are remembered, so repeating a search costs less.
 - **Privacy.** TheGipher talks only to GIPHY (your searches and the GIFs you load).
-  Your API key and recent GIFs are stored on your Mac, in the app's preferences.
+  Your API key, favorites and recent GIFs are stored on your Mac, in the app's
+  preferences.
   There are no accounts and no analytics.
-- **The Accessibility permission** is used for one thing: pressing ⌘V in the app you
-  were typing in.
+- **The Accessibility permission** is used for one thing: pressing ⌘V (and Return,
+  for paste-and-send) in the app you were typing in.
+- **Paste and send** waits a little over half a second between pasting and pressing
+  Return, to give the GIF time to attach. If a message ever goes out without its
+  GIF, the app you're pasting into needed longer.
 
 ## Development
 
@@ -107,7 +125,8 @@ swift test                        # unit tests
 
 It's a Swift package with no dependencies:
 
-- `Sources/GipherCore` — the GIPHY API client and models. No UI; covered by the tests.
+- `Sources/GipherCore` — the GIPHY API client, models and hotkey type. No UI; covered
+  by the tests.
 - `Sources/TheGipher` — the app: hotkey, floating panel, search grid, paste, drag.
 
 Debug builds can render the panel to an image without launching the app, which is how
@@ -116,6 +135,8 @@ the screenshot above was made:
 ```sh
 BIN="$(swift build --show-bin-path)/TheGipher"
 "$BIN" --snapshot live docs/screenshot.png touchdown   # real search, uses the installed app's key
+"$BIN" --snapshot live docs/screenshot-light.png touchdown --light
+"$BIN" --snapshot live /tmp/preview.png touchdown --preview   # with the large preview open
 "$BIN" --snapshot grid /tmp/panel.png                  # fixed content; also: empty, setup
 ```
 

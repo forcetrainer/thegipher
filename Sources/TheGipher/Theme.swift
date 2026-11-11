@@ -1,21 +1,47 @@
 import AppKit
 import SwiftUI
 
-/// Navy and gold, after the Gipper's old school colors.
+/// Navy and gold, after the Gipper's old school colors. Every color has a light and a
+/// dark variant: gold-on-navy in dark mode, navy-on-cream in light mode.
 enum Theme {
-    static let gold = Color(red: 0.98, green: 0.76, blue: 0.20)
-    static let navy = Color(red: 0.04, green: 0.08, blue: 0.20)
-    static let cream = Color(red: 0.98, green: 0.95, blue: 0.86)
     static let panelRadius: CGFloat = 16
     static let tagline = "Win one for the Gipher."
 
-    /// Tints the blurred panel background navy.
+    private static func dynamic(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+        })
+    }
+
+    private static func rgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> NSColor {
+        NSColor(srgbRed: r, green: g, blue: b, alpha: a)
+    }
+
+    static let navy = Color(red: 0.04, green: 0.08, blue: 0.20)
+
+    /// Gold used as a fill: selected tab, selection ring, hovered chip.
+    static let accent = dynamic(light: rgb(0.96, 0.70, 0.08), dark: rgb(0.98, 0.76, 0.20))
+    /// Gold used for text and icons; darker in light mode so it stays readable.
+    static let accentText = dynamic(light: rgb(0.66, 0.42, 0.00), dark: rgb(0.98, 0.76, 0.20))
+    /// Text on top of an accent fill.
+    static let onAccent = navy
+    /// The "The" in the wordmark.
+    static let ink = dynamic(light: rgb(0.04, 0.08, 0.20), dark: rgb(0.98, 0.95, 0.86))
+
+    private static let backdropTop = dynamic(
+        light: rgb(0.97, 0.96, 0.92, 0.60), dark: rgb(0.10, 0.17, 0.40, 0.62))
+    private static let backdropBottom = dynamic(
+        light: rgb(0.90, 0.92, 0.97, 0.72), dark: rgb(0.03, 0.05, 0.14, 0.78))
+
+    /// Tints the blurred panel background.
     static let backdrop = LinearGradient(
-        colors: [
-            Color(red: 0.10, green: 0.17, blue: 0.40).opacity(0.62),
-            Color(red: 0.03, green: 0.05, blue: 0.14).opacity(0.78),
-        ],
-        startPoint: .top, endPoint: .bottom)
+        colors: [backdropTop, backdropBottom], startPoint: .top, endPoint: .bottom)
+
+    static let footer = dynamic(light: rgb(0, 0, 0, 0.05), dark: rgb(0, 0, 0, 0.22))
+    /// Covers the grid behind a large preview.
+    static let scrim = dynamic(light: rgb(0.95, 0.95, 0.96, 0.93), dark: rgb(0.03, 0.05, 0.13, 0.93))
+    /// Stands in for the blurred backdrop in offscreen snapshots.
+    static let snapshotBase = dynamic(light: rgb(0.93, 0.93, 0.92), dark: rgb(0.07, 0.10, 0.22))
 
     /// Menu bar glyph: a filled badge with "GIF" knocked out. A template image, so
     /// macOS colors it for light and dark menu bars.
@@ -45,9 +71,8 @@ struct Wordmark: View {
     var size: CGFloat = 13
 
     var body: some View {
-        (Text("The").foregroundStyle(Theme.cream) + Text("Gipher").foregroundStyle(Theme.gold))
+        (Text("The").foregroundStyle(Theme.ink) + Text("Gipher").foregroundStyle(Theme.accentText))
             .font(.system(size: size, weight: .black, design: .rounded))
-            .italic()
     }
 }
 
@@ -59,7 +84,7 @@ struct Keycap: View {
             .font(.system(size: 10, weight: .semibold, design: .rounded))
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
-            .background(Color.white.opacity(0.13), in: RoundedRectangle(cornerRadius: 4))
+            .background(Color.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
     }
 }
 

@@ -14,15 +14,13 @@ private final class SearchPanel: NSPanel {
 final class PanelController: NSObject, NSWindowDelegate {
     let model: SearchModel
     private let settings: AppSettings
-    private let recents: RecentsStore
     private let panel: SearchPanel
     private var targetApp: NSRunningApplication?
     private var keyMonitor: Any?
 
-    init(settings: AppSettings, recents: RecentsStore) {
+    init(settings: AppSettings) {
         self.settings = settings
-        self.recents = recents
-        model = SearchModel(settings: settings, recents: recents)
+        model = SearchModel(settings: settings)
         panel = SearchPanel(
             contentRect: NSRect(x: 0, y: 0, width: 760, height: 540),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -36,13 +34,12 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.isMovableByWindowBackground = false  // header and footer drag it instead
-        panel.appearance = NSAppearance(named: .darkAqua)
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.animationBehavior = .utilityWindow
         panel.delegate = self
 
         let backdrop = NSVisualEffectView()
-        backdrop.material = .hudWindow
+        backdrop.material = .popover
         backdrop.state = .active
         backdrop.blendingMode = .behindWindow
         backdrop.wantsLayer = true
@@ -54,8 +51,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         backdrop.addSubview(host)
         panel.contentView = backdrop
 
-        model.onSend = { [weak self] gif in self?.send(gif, autoPaste: true) }
-        model.onCopyOnly = { [weak self] gif in self?.send(gif, autoPaste: false) }
+        model.onSend = { [weak self] gif, mode in self?.send(gif, mode: mode) }
     }
 
     var isVisible: Bool { panel.isVisible }
@@ -87,6 +83,10 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.orderOut(nil)
     }
 
+    func windowDidResignKey(_ notification: Notification) {
+        hide()
+    }
+
     private static let originKey = "panelOrigin"
 
     /// Reopen where it was last left (handy once you've moved it beside the
@@ -109,13 +109,9 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    func windowDidResignKey(_ notification: Notification) {
-        hide()
-    }
-
     // MARK: Sending
 
-    private func send(_ gif: Gif, autoPaste: Bool) {
+    private func send(_ gif: Gif, mode: SendMode) {
         guard model.sendingID == nil else { return }
         model.sendingID = gif.id
         model.message = nil
@@ -124,12 +120,12 @@ final class PanelController: NSObject, NSWindowDelegate {
             do {
                 let file = try await Paster.file(for: gif, quality: settings.sendQuality).value
                 Paster.copy(file)
-                recents.add(gif)
+                GifListStore.recents.add(gif)
             } catch {
                 model.message = error.localizedDescription
                 return
             }
-            guard autoPaste else {
+            guard mode != .copyOnly else {
                 model.message = "Copied."
                 return
             }
@@ -145,6 +141,11 @@ final class PanelController: NSObject, NSWindowDelegate {
             // Give the target app a beat to take keyboard focus back.
             try? await Task.sleep(for: .milliseconds(140))
             Paster.pressPaste()
+            if mode == .pasteAndSend {
+                // The GIF has to finish attaching before Return will send it.
+                try? await Task.sleep(for: .milliseconds(600))
+                Paster.pressReturn()
+            }
         }
     }
 
@@ -168,11 +169,20 @@ final class PanelController: NSObject, NSWindowDelegate {
         let command = event.modifierFlags.contains(.command)
         switch Int(event.keyCode) {
         case kVK_Escape:
-            hide()
+            if model.previewing { model.previewing = false } else { hide() }
             return true
         case kVK_Return, kVK_ANSI_KeypadEnter:
             guard let gif = model.choice else { return false }
-            send(gif, autoPaste: true)
+            send(gif, mode: command ? .pasteAndSend : .paste)
+            return true
+        case kVK_Space:
+            // Space previews the highlighted GIF; with nothing highlighted it's just a space.
+            guard model.selected != nil else { return false }
+            model.previewing.toggle()
+            return true
+        case kVK_ANSI_D where command:
+            guard let gif = model.selected else { return false }
+            model.toggleFavorite(gif)
             return true
         case kVK_Tab: return model.acceptSuggestion()
         case kVK_DownArrow: return model.move(.down)
@@ -181,7 +191,8 @@ final class PanelController: NSObject, NSWindowDelegate {
         case kVK_RightArrow: return !command && model.move(.right)
         case kVK_ANSI_1 where command: model.tab = .gifs; return true
         case kVK_ANSI_2 where command: model.tab = .stickers; return true
-        case kVK_ANSI_3 where command: model.tab = .recent; return true
+        case kVK_ANSI_3 where command: model.tab = .favorites; return true
+        case kVK_ANSI_4 where command: model.tab = .recent; return true
         default: return false
         }
     }
