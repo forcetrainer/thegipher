@@ -7,6 +7,17 @@ cd "$(dirname "$0")/.."
 APP="build/TheGipher.app"
 VERSION="0.1.0"
 
+# The Command Line Tools toolchain can't expand SwiftUI's macros, so build with
+# Xcode's when the Command Line Tools are the selected developer directory.
+XCODE_DEV="/Applications/Xcode.app/Contents/Developer"
+if [[ -z "${DEVELOPER_DIR:-}" && "$(xcode-select -p 2>/dev/null)" == */CommandLineTools ]]; then
+    if [[ ! -d "$XCODE_DEV" ]]; then
+        echo "error: building TheGipher needs Xcode; only the Command Line Tools are installed." >&2
+        exit 1
+    fi
+    export DEVELOPER_DIR="$XCODE_DEV"
+fi
+
 swift build -c release --product TheGipher
 BIN="$(swift build -c release --show-bin-path)/TheGipher"
 
